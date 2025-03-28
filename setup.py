@@ -6,9 +6,9 @@ setup(
     description="Monte Carlo simulation with DFT energy calculations",
     author="Yifan Cao",
     author_email="yifanc@mit.com",
-    packages=find_packages(),
+    packages=find_packages(include=['dftmc', 'dftmc.*']),
     install_requires=[
-        "pymatgen>=2023.0.0",
+        "pymatgen>=2022.2.10",
         "numpy>=1.20.0",
     ],
     extras_require={
@@ -23,8 +23,8 @@ setup(
     },
     python_requires=">=3.8",
     entry_points={
-        "console_scripts": [
-            "dft-mc=bin.MC:main",
+        'console_scripts': [
+            'dftmc=dftmc.DFTMC:main',
         ],
     },
 ) 

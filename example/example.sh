@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --requeue
 #SBATCH --account=sua183
-#SBATCH --output=data/log/job_out_1.log
-#SBATCH --error=data/log/job_err_1.log
+#SBATCH --output=out_1.log
+#SBATCH --error=err_1.log
 #SBATCH --partition=compute
 #SBATCH --job-name=1_DFTMC
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=128
 #SBATCH --mem=249325M
-#SBATCH --time=48:00:00
+#SBATCH --time=02:00:00
 
 # Load necessary modules, example:
 # Basic modules
@@ -39,12 +39,17 @@ mkdir -p ./data/run_folder_1
 mkdir -p ./data/structures_1
 mkdir -p ./data/log
 
-python MC.py 5001 128 \
+conda env list
+conda activate dft-mc
+
+# Run Monte Carlo simulation
+python -m dftmc.DFTMC 11 64 \
     ./random_structures/POSCAR_1 \
     ./data/run_folder_1/ \
     ./data/structures_1/ \
     1 \
-    500
+    500 \
+    ./source/
 
 duration=$SECONDS
 echo "Total job time: $duration seconds" 

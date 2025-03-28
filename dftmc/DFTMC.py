@@ -2,18 +2,45 @@
 
 import os
 import sys
+import shutil
 from pathlib import Path
 import subprocess
-from mc_utils import MCRunner
+from .mc_utils import MCRunner 
 
 def ensure_directory(path):
     """Create directory if it doesn't exist"""
     Path(path).mkdir(parents=True, exist_ok=True)
 
+def copy_vasp_inputs(source_dir, run_dir):
+    """Copy VASP input files from source directory"""
+    required_files = ['INCAR', 'POTCAR', 'KPOINTS']
+    
+    if not os.path.exists(source_dir):
+        print(f"Error: Source directory {source_dir} does not exist!")
+        sys.exit(1)
+        
+    for file in required_files:
+        src_file = os.path.join(source_dir, file)
+        if not os.path.exists(src_file):
+            print(f"Error: Required file {file} not found in {source_dir}")
+            sys.exit(1)
+        shutil.copy2(src_file, run_dir)
+    
+    print(f"Copied VASP input files from {source_dir} to {run_dir}")
+
+def check_vasp_inputs(run_dir):
+    """Check if necessary VASP input files exist"""
+    required_files = ['INCAR', 'POTCAR', 'KPOINTS']
+    missing = [f for f in required_files if not os.path.exists(os.path.join(run_dir, f))]
+    if missing:
+        print(f"Warning: Missing VASP input files in {run_dir}: {', '.join(missing)}")
+        return False
+    return True
+
 def main():
     # Parse command line arguments
-    if len(sys.argv) != 8:
-        print("Usage: python MC.py max_iteration num_cores in_dir run_dir save_dir save_freq T")
+    if len(sys.argv) != 9:
+        print("Usage: python DFTMC.py max_iteration num_cores in_dir run_dir save_dir save_freq T source_dir")
         sys.exit(1)
 
     max_iteration = int(sys.argv[1])
@@ -23,6 +50,7 @@ def main():
     save_dir = sys.argv[5]
     save_freq = int(sys.argv[6])
     temperature = sys.argv[7]
+    source_dir = sys.argv[8]  # New argument for source directory
 
     # Check input file exists
     if not os.path.exists(in_dir):
@@ -32,7 +60,13 @@ def main():
     # Create necessary directories
     ensure_directory(run_dir)
     ensure_directory(save_dir)
-    ensure_directory(os.path.dirname(os.path.join(save_dir, 'MClog')))  # For log files
+    ensure_directory(os.path.dirname(os.path.join(save_dir, 'MClog')))
+
+    # Copy and check VASP input files
+    copy_vasp_inputs(source_dir, run_dir)
+    if not check_vasp_inputs(run_dir):
+        print("Error copying VASP input files")
+        sys.exit(1)
 
     # Initialize MC runner
     mc = MCRunner(run_dir, save_dir, temperature)
@@ -45,6 +79,8 @@ def main():
     vasp_path = os.getenv('VASP_PATH', '/home/yifanc/MD_intro/vasp.6.2.1/bin/vasp_gam')
     if not os.path.exists(vasp_path):
         print(f"Warning: VASP executable not found at {vasp_path}")
+        print("Please set VASP_PATH environment variable to point to your VASP executable")
+        sys.exit(1)
     vasp_cmd = f"mpirun -np {num_cores} {vasp_path}"
     mclog_path = os.path.join(save_dir, 'MClog')
 

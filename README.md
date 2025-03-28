@@ -14,7 +14,7 @@ This package implements a Monte Carlo algorithm for atomic structure sampling, u
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/yifan-henry-cao/DFTMonteCarlo.git
    cd DFTMonteCarlo
    ```
 
@@ -28,6 +28,7 @@ This package implements a Monte Carlo algorithm for atomic structure sampling, u
    ```bash
    # For basic installation
    pip install -r requirements.txt
+   pip install -e .
 
    # For development installation (includes testing tools)
    pip install -e ".[dev]"
@@ -36,7 +37,7 @@ This package implements a Monte Carlo algorithm for atomic structure sampling, u
 ## Dependencies
 
 Core dependencies:
-- pymatgen (>= 2023.0.0): For structure manipulation and I/O
+- pymatgen (>= 2022.2.10): For structure manipulation and I/O
 - numpy (>= 1.20.0): For numerical operations
 
 Optional dependencies:
@@ -57,9 +58,13 @@ Development dependencies:
    export VASP_PATH=/path/to/vasp/binary
    ```
 
-3. Run the Monte Carlo simulation:
+3. Run the Monte Carlo simulation. You can use any of these methods:
    ```bash
-   python MC.py max_iteration num_cores in_dir run_dir save_dir save_freq T
+   # As a Python module (recommended)
+   python -m dftmc.DFTMC max_iteration num_cores in_dir run_dir save_dir save_freq T source_dir
+
+   # Using the console script
+   dftmc max_iteration num_cores in_dir run_dir save_dir save_freq T source_dir
    ```
 
 Arguments:
@@ -70,18 +75,42 @@ Arguments:
 - save_dir: Directory for saving results
 - save_freq: Frequency of saving intermediate results
 - T: Temperature for Metropolis criterion (K)
+- source_dir: Directory containing VASP input files (INCAR, POTCAR, KPOINTS)
 
 See the example directory for a complete job script example.
 
 ## Directory Structure
 
-- bin/: Executable scripts
-- src/: Source code
-- example/: Example job scripts and input files
-- tests/: Test files (if any)
+```
+DFTMonteCarlo/
+├── dftmc/                     # Main package directory
+│   ├── __init__.py           # Package initialization
+│   ├── DFTMC.py              # Main script
+│   └── mc_utils.py           # Core functionality
+├── example/
+│   ├── example.sh            # Example job script
+│   └── random_structures/    # Example input structures
+├── setup.py                  # Installation configuration
+├── requirements.txt          # Package dependencies
+└── README.md                 # This file
+```
 
 ## Notes
 
 - Requires VASP to be installed and accessible
 - Designed for HPC environments with SLURM job scheduler
 - Supports restart from previous calculations
+- Can be run from any directory after installation
+
+## For Developers
+
+You can also use the package programmatically:
+```python
+from dftmc import MCRunner
+
+# Initialize MC runner
+mc = MCRunner(run_dir="./run", save_dir="./save", temperature=500)
+
+# Use mc_runner methods directly
+mc.prepare_step(step=0, input_file="POSCAR", restart=True)
+```

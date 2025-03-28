@@ -1,0 +1,28 @@
+general:
+  SYSTEM = fcc CrCoNi
+  # Start parameters for the run
+  #ISTART = 1 ; ICHARG=2 # New simulation; charge from atom
+  ISTART = 0 # Restart from stratch
+  PREC   = Normal # Standard precision calculations
+
+  # electronic optimization
+  ENCUT  =    430
+  ISMEAR =    2  ; SIGMA = 0.1
+  LORBIT = 11
+  ALGO   = Fast # algorithm for electron optimization
+  NELM   = 1000   # of ELM steps
+  EDIFF  = 1E-04  # stopping-criterion for ELM
+  IBRION = -1     # no ion update
+
+  # performance optimization
+  KPAR   = 1      # make 1 group, each group working on one set of k-points
+  NCORE  = 32      # one orbital handled by 64 cores
+  LREAL  = Auto  # reciprocal space projection, slow but accurate (default)
+
+  # Don't write WAVECAR or CHGCAR, simplify OUTCAR
+  LWAVE  = .FALSE.
+  LCHARG = .FALSE.
+  NWRITE = 0
+spin:
+  ISPIN=2
+  MAGMOM = 36*0.6 36*2.0 36*1.0

@@ -1,0 +1,3 @@
+[console_scripts]
+dftmc = dftmc.DFTMC:main
+

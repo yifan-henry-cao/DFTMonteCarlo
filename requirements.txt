@@ -1,0 +1,12 @@
+# Core dependencies
+pymatgen>=2023.0.0    # For structure manipulation and I/O
+numpy>=1.20.0         # Required for numerical operations
+
+# Optional but recommended
+scipy>=1.7.0          # Scientific computing tools
+matplotlib>=3.4.0     # For plotting (if needed)
+
+# Development dependencies (optional)
+pytest>=6.0.0         # For running tests
+black>=22.0.0         # For code formatting
+pylint>=2.8.0         # For code linting 

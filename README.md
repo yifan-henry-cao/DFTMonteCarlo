@@ -114,3 +114,29 @@ mc = MCRunner(run_dir="./run", save_dir="./save", temperature=500)
 # Use mc_runner methods directly
 mc.prepare_step(step=0, input_file="POSCAR", restart=True)
 ```
+
+## Contact
+If any questions, feel free to contact me (yifanc@mit.edu).
+
+## References & Citing 
+If you use this repository in your work, please cite:
+
+```
+@misc{cao_capturing_2024,
+      title={Capturing short-range order in high-entropy alloys with machine learning potentials}, 
+      author={Yifan Cao and Killian Sheriff and Rodrigo Freitas},
+      year={2024},
+      eprint={2401.06622},
+      archivePrefix={arXiv},
+      primaryClass={cond-mat.mtrl-sci},
+      url={https://arxiv.org/abs/2401.06622}, 
+}
+
+@article{sheriffquantifying2024,
+	title = {Quantifying chemical short-range order in metallic alloys},
+	doi = {10.1073/pnas.2322962121},
+	journaltitle = {Proceedings of the National Academy of Sciences},
+	author = {Sheriff, Killian and Cao, Yifan and Smidt, Tess and Freitas, Rodrigo},
+	date = {2024-06-18},
+}
+```

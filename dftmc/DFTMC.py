@@ -3,9 +3,10 @@
 import os
 import sys
 import shutil
+import time
 from pathlib import Path
 import subprocess
-from .mc_utils import MCRunner 
+from .mc_utils import MCRunner
 
 def ensure_directory(path):
     """Create directory if it doesn't exist"""
@@ -27,15 +28,6 @@ def copy_vasp_inputs(source_dir, run_dir):
         shutil.copy2(src_file, run_dir)
     
     print(f"Copied VASP input files from {source_dir} to {run_dir}")
-
-def check_vasp_inputs(run_dir):
-    """Check if necessary VASP input files exist"""
-    required_files = ['INCAR', 'POTCAR', 'KPOINTS']
-    missing = [f for f in required_files if not os.path.exists(os.path.join(run_dir, f))]
-    if missing:
-        print(f"Warning: Missing VASP input files in {run_dir}: {', '.join(missing)}")
-        return False
-    return True
 
 def main():
     # Parse command line arguments
@@ -60,26 +52,23 @@ def main():
     # Create necessary directories
     ensure_directory(run_dir)
     ensure_directory(save_dir)
-    ensure_directory(os.path.dirname(os.path.join(save_dir, 'MClog')))
 
-    # Copy and check VASP input files
+    # Copy VASP input files
     copy_vasp_inputs(source_dir, run_dir)
-    if not check_vasp_inputs(run_dir):
-        print("Error copying VASP input files")
-        sys.exit(1)
 
     # Initialize MC runner
     mc = MCRunner(run_dir, save_dir, temperature)
 
     # Set environment variables and paths
     os.environ['OMP_NUM_THREADS'] = '1'
-    home_dir = os.getcwd()
-    
-    # Get VASP path from environment variable or use default
-    vasp_path = os.getenv('VASP_PATH', '/home/yifanc/MD_intro/vasp.6.2.1/bin/vasp_gam')
+
+    # Get VASP path from environment variable
+    vasp_path = os.getenv('VASP_PATH')
+    if not vasp_path:
+        print("Error: VASP_PATH environment variable is not set. Please set it to point to your VASP executable.")
+        sys.exit(1)
     if not os.path.exists(vasp_path):
-        print(f"Warning: VASP executable not found at {vasp_path}")
-        print("Please set VASP_PATH environment variable to point to your VASP executable")
+        print(f"Error: VASP executable not found at {vasp_path}")
         sys.exit(1)
     vasp_cmd = f"mpirun -np {num_cores} {vasp_path}"
     mclog_path = os.path.join(save_dir, 'MClog')
@@ -87,34 +76,36 @@ def main():
     # Check if this is a restart or fresh run
     if os.path.exists(mclog_path):
         print(f"{mclog_path} exists, reading last step info")
-        istart = mc.read_last_step(mclog_path)
-        mc.prepare_step(istart, f"{save_dir}POSCAR_{istart}", restart=True)
+        istart, last_energy = mc.read_last_step(mclog_path)
+        mc.prepare_step(istart, os.path.join(save_dir, f"POSCAR_{istart}"), restart=True)
+        mc.restore_accepted_energy(last_energy)
     else:
         print(f"{mclog_path} does not exist. Initializing..")
         istart = 0
         mc.prepare_step(istart, in_dir, restart=True)
-        
+
         # Run initial VASP calculation
-        os.chdir(run_dir)
-        subprocess.run(vasp_cmd, shell=True, check=True)
-        os.chdir(home_dir)
-        
+        t0 = time.time()
+        subprocess.run(vasp_cmd, shell=True, check=True, cwd=run_dir)
+        runtime = time.time() - t0
+
         # Process results
-        mc.finalize_step(istart, save_freq, restart=True)
+        mc.finalize_step(istart, save_freq, restart=True, runtime=runtime)
+        print(f"step {istart}: runtime={runtime:.1f}s accept=True (restart)")
 
     # Main Monte Carlo loop
     for i in range(istart + 1, max_iteration):
         # Prepare next iteration
-        mc.prepare_step(i, f"{run_dir}accepted_POSCAR", restart=False)
-        
+        mc.prepare_step(i, os.path.join(run_dir, "accepted_POSCAR"), restart=False)
+
         # Run VASP
-        os.chdir(run_dir)
-        subprocess.run(vasp_cmd, shell=True, check=True)
-        os.chdir(home_dir)
-        
+        t0 = time.time()
+        subprocess.run(vasp_cmd, shell=True, check=True, cwd=run_dir)
+        runtime = time.time() - t0
+
         # Process results
-        mc.finalize_step(i, save_freq, restart=False)
-        print(i)
+        accept = mc.finalize_step(i, save_freq, restart=False, runtime=runtime)
+        print(f"step {i}: runtime={runtime:.1f}s accept={accept}")
 
 if __name__ == "__main__":
     main() 

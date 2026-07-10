@@ -18,6 +18,8 @@ class MCRunner:
         self.save_dir = save_dir
         self.temperature = float(temperature)
         self.kb = 8.617333262E-5  # Boltzmann constant in eV/K
+        self._last_prepared_structure = None  # structure just written to run_dir/POSCAR
+        self._accepted_structure = None  # structure currently in run_dir/accepted_POSCAR
 
     def write_structure(self, structure, filename, fmt='poscar', suppress_output=True):
         """Write structure to file in specified format"""
@@ -51,73 +53,96 @@ class MCRunner:
             restart: Whether this is a restart step
         """
         structure = Structure.from_file(input_file, sort=True)
-        
+
         if not restart:
             # Perform atom swap
             natoms = len(structure)
-            i1, i2 = np.random.choice(natoms, 2)
+            if len(set(structure.species)) < 2:
+                raise ValueError("Structure has fewer than 2 distinct species; no atom swap is possible")
+            i1, i2 = np.random.choice(natoms, 2, replace=False)
             while structure.species[i1] == structure.species[i2]:
-                i1, i2 = np.random.choice(natoms, 2)
-            
+                i1, i2 = np.random.choice(natoms, 2, replace=False)
+
             # Swap atoms
             t1 = structure.species[i1]
             structure[int(i1)] = structure.species[i2]
             structure[int(i2)] = t1
             structure = structure.get_sorted_structure()
-        
-        # Write new structure
-        self.write_structure(structure, f"{self.run_dir}/POSCAR")
-        if restart:
-            self.write_structure(structure, f"{self.run_dir}/accepted_POSCAR")
 
-    def finalize_step(self, step, save_freq, restart=False):
+        # Write new structure
+        self._last_prepared_structure = structure
+        self.write_structure(structure, os.path.join(self.run_dir, "POSCAR"))
+        if restart:
+            self.write_structure(structure, os.path.join(self.run_dir, "accepted_POSCAR"))
+            self._accepted_structure = structure
+
+    def finalize_step(self, step, save_freq, restart=False, runtime=None):
         """
         Process results after energy calculation
-        
+
         Args:
             step: Current MC step number
             save_freq: Frequency to save intermediate results
             restart: Whether this is a restart step
-        
+            runtime: Wall-clock time (seconds) the VASP call for this step took
+
         Returns:
             bool: Whether the step was accepted
         """
-        energy_flip = self.read_vasp_energy(f"{self.run_dir}/OSZICAR")
-        
+        energy_flip = self.read_vasp_energy(os.path.join(self.run_dir, "OSZICAR"))
+        runtime_str = f"{runtime:.2f}" if runtime is not None else "NA"
+
         if restart:
             # For restart steps, always accept
-            with open(f"{self.run_dir}/accepted_energy", 'w') as f:
+            with open(os.path.join(self.run_dir, "accepted_energy"), 'w') as f:
                 f.write(str(energy_flip))
-            with open(f"{self.save_dir}/MClog", "a") as f:
-                f.write(f"{step} {energy_flip} 1\n")
+            # Save a snapshot too, so a later resume from this MClog line can
+            # always reload save_dir/POSCAR_{step} (mirrors the non-restart path below).
+            # self._accepted_structure was just set by prepare_step, no need to re-read from disk.
+            self.write_structure(self._accepted_structure, os.path.join(self.save_dir, f"POSCAR_{step}"))
+            with open(os.path.join(self.save_dir, "MClog"), "a") as f:
+                f.write(f"{step} {energy_flip} 1 {runtime_str}\n")
             return True
-        
+
         # Read current accepted energy
-        with open(f"{self.run_dir}/accepted_energy", 'r') as f:
+        with open(os.path.join(self.run_dir, "accepted_energy"), 'r') as f:
             current_energy = float(f.readline())
-        
-        # Metropolis acceptance criterion
+
+        # Metropolis acceptance criterion. Clamp the exponent at 0 to avoid an
+        # overflow warning from np.exp on large positive deltas (result is
+        # discarded by min(1, ...) anyway).
+        delta = -(energy_flip - current_energy) / (self.kb * self.temperature)
+        probability = 1.0 if delta >= 0 else np.exp(delta)
+
         accept = False
-        if np.random.random() < min(1, np.exp(-(energy_flip - current_energy) / (self.kb * self.temperature))):
+        if np.random.random() < probability:
             accept = True
             current_energy = energy_flip
-            structure = Structure.from_file(f"{self.run_dir}/POSCAR", sort=True)
-            self.write_structure(structure, f"{self.run_dir}/accepted_POSCAR")
-            with open(f"{self.run_dir}/accepted_energy", 'w') as f:
+            # self._last_prepared_structure is the exact structure just written
+            # to run_dir/POSCAR by prepare_step, no need to re-read from disk.
+            structure = self._last_prepared_structure
+            self.write_structure(structure, os.path.join(self.run_dir, "accepted_POSCAR"))
+            self._accepted_structure = structure
+            with open(os.path.join(self.run_dir, "accepted_energy"), 'w') as f:
                 f.write(str(energy_flip))
-        
+
         # Save intermediate results if needed
         if step % save_freq == 0:
-            structure = Structure.from_file(f"{self.run_dir}/accepted_POSCAR", sort=True)
-            self.write_structure(structure, f"{self.save_dir}/POSCAR_{step}")
-            with open(f"{self.save_dir}/MClog", "a") as f:
-                f.write(f"{step} {current_energy} {int(accept)}\n")
-        
+            self.write_structure(self._accepted_structure, os.path.join(self.save_dir, f"POSCAR_{step}"))
+            with open(os.path.join(self.save_dir, "MClog"), "a") as f:
+                f.write(f"{step} {current_energy} {int(accept)} {runtime_str}\n")
+
         return accept
+
+    def restore_accepted_energy(self, energy):
+        """Write a previously accepted energy value into run_dir (used when resuming)"""
+        with open(os.path.join(self.run_dir, "accepted_energy"), 'w') as f:
+            f.write(str(energy))
 
     @staticmethod
     def read_last_step(mclog_path):
-        """Read the last step number from MClog file"""
+        """Read the last step number and its accepted energy from MClog file"""
         with open(mclog_path, 'r') as f:
             last_line = f.readlines()[-1]
-            return int(last_line.split()[0]) 
+        parts = last_line.split()
+        return int(parts[0]), float(parts[1]) 

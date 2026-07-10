@@ -52,4 +52,7 @@ CONTCAR
 # Project specific
 data/
 MClog
-accepted_* 
+accepted_*
+
+# Local test runs
+FeMnGa_test/ 

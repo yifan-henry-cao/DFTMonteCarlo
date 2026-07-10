@@ -189,15 +189,40 @@ class MCRunner:
             self._write_structure_maybe_spin(structure, os.path.join(self.run_dir, "accepted_POSCAR"))
             self._accepted_structure = structure
 
-    _MCLOG_HEADER = (
-        "# step accepted_energy perturbed_energy dE probability random "
-        "accepted cum_accept_ratio runtime_s saved\n"
-    )
+    # (name, width) per column. Widths are picked to fit the header name and
+    # realistic values; every row (header included) is rendered through
+    # _mclog_row() with these same widths so columns line up under the header.
+    _MCLOG_COLUMNS = [
+        ("step", 6),
+        ("accepted_energy", 16),
+        ("perturbed_energy", 16),
+        ("dE", 12),
+        ("probability", 12),
+        ("random", 10),
+        ("accepted", 8),
+        ("cum_accept_ratio", 16),
+        ("runtime_s", 10),
+        ("saved", 5),
+    ]
+
+    @classmethod
+    def _mclog_row(cls, values):
+        """Right-justify each (already-stringified) value into its column
+        width and join with a single space, so every row — including the
+        header — lines up at the same character positions."""
+        return " ".join(f"{v:>{w}}" for v, (_, w) in zip(values, cls._MCLOG_COLUMNS))
 
     def _ensure_mclog_header(self, mclog_path):
         if not os.path.exists(mclog_path):
+            names = [name for name, _ in self._MCLOG_COLUMNS]
+            line = self._mclog_row(names)
+            # Swap in a leading "#" (for the skip-this-line check elsewhere)
+            # without disturbing any column position: line[0] is otherwise a
+            # padding space or the first character of "step", either way
+            # replacing just it keeps every other column aligned with the
+            # data rows below, which have no such prefix.
             with open(mclog_path, "w") as f:
-                f.write(self._MCLOG_HEADER)
+                f.write("#" + line[1:] + "\n")
 
     def _cumulative_accept_stats(self, mclog_path, this_accept):
         """Cumulative (ratio, n_accepted, n_proposed) over all *proposed*
@@ -250,7 +275,10 @@ class MCRunner:
             # self._accepted_structure was just set by prepare_step, no need to re-read from disk.
             self._write_structure_maybe_spin(self._accepted_structure, os.path.join(self.save_dir, f"POSCAR_{step}"))
             with open(mclog_path, "a") as f:
-                f.write(f"{step} {energy_flip} NA NA NA NA 1 NA {runtime_str} 1\n")
+                f.write(self._mclog_row([
+                    str(step), f"{energy_flip:.6f}", "NA", "NA", "NA", "NA",
+                    "1", "NA", runtime_str, "1",
+                ]) + "\n")
             return True
 
         # Read current accepted energy
@@ -286,8 +314,11 @@ class MCRunner:
 
         ratio, _, _ = self._cumulative_accept_stats(mclog_path, accept)
         with open(mclog_path, "a") as f:
-            f.write(f"{step} {current_energy} {energy_flip} {dE:.6f} {probability:.6f} "
-                    f"{random_draw:.6f} {int(accept)} {ratio:.4f} {runtime_str} {saved}\n")
+            f.write(self._mclog_row([
+                str(step), f"{current_energy:.6f}", f"{energy_flip:.6f}", f"{dE:.6f}",
+                f"{probability:.6f}", f"{random_draw:.6f}", str(int(accept)),
+                f"{ratio:.4f}", runtime_str, str(saved),
+            ]) + "\n")
 
         return accept
 

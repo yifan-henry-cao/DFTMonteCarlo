@@ -77,6 +77,7 @@ def main():
     if os.path.exists(mclog_path):
         print(f"{mclog_path} exists, reading last step info")
         istart, last_energy = mc.read_last_step(mclog_path)
+        mc.truncate_mclog(mclog_path, istart)
         mc.prepare_step(istart, os.path.join(save_dir, f"POSCAR_{istart}"), restart=True)
         mc.restore_accepted_energy(last_energy)
     else:
